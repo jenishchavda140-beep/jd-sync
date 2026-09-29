@@ -1,33 +1,54 @@
-import type { Client } from '@/types';
+import { stripe } from '@/lib/stripe';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
-export function ClientCard({ client, compact = false }: { client: Client; compact?: boolean }) {
-  return (
-    <div className={`card ${compact ? 'p-3' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-white">{client.name}</h3>
-          <p className="text-sm text-slate-400">{client.company || 'Independent freelancer'}</p>
-        </div>
-        <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-xs text-green-300">
-          Active
-        </span>
-      </div>
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
 
-      <div className="mt-4 space-y-2 text-sm text-slate-300">
-        <p>{client.email}</p>
-        {!compact ? <p className="text-slate-400">Added {new Date(client.created_at || Date.now()).toLocaleDateString()}</p> : null}
-      </div>
+export async function POST(request: Request) {
+  const payload = await request.text();
+  const signature = request.headers.get('stripe-signature');
 
-      {!compact ? (
-        <div className="mt-4 flex gap-2">
-          <button type="button" className="btn-secondary flex-1">
-            View
-          </button>
-          <button type="button" className="btn-primary flex-1">
-            Invoice
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
+  if (!signature) {
+    return new NextResponse('Missing Stripe signature', { status: 400 });
+  }
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      payload,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET || ''
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new NextResponse(`Webhook signature verification failed: ${errorMessage}`, { status: 400 });
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const invoiceId = session.metadata?.invoiceId;
+
+    if (invoiceId) {
+      const supabase = createServerSupabaseClient(cookies());
+      const { error } = await supabase
+        .from('invoices')
+        .update({ status: 'Paid' })
+        .eq('id', invoiceId);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    }
+  }
+
+  return new NextResponse(JSON.stringify({ received: true }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }

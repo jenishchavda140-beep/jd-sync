@@ -1,46 +1,81 @@
-import { ClientCard } from '@/components/ClientCard';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+'use client';
 
-export default async function ClientsPage() {
-  const supabase = createServerSupabaseClient(cookies());
-  const {
-    data: { user },
-    error: userError
-  } = await supabase.auth.getUser();
+import { useRouter } from 'next/navigation';
+import { FormEvent, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
-  if (userError || !user) {
-    redirect('/login');
-  }
+export default function AddClientForm() {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [company, setCompany] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
 
-  const { data: clients = [] } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    setMessage('');
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setMessage('Please sign in to add a client.');
+      setLoading(false);
+      return;
+    }
+
+    const response = await fetch('/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, company })
+    });
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+      setMessage(payload.error || 'Failed to create client');
+      setLoading(false);
+      return;
+    }
+
+    setMessage('Client added successfully.');
+    setName('');
+    setEmail('');
+    setCompany('');
+    setLoading(false);
+    router.refresh();
+  };
 
   return (
-    <main className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-green-400/80">Clients</p>
-          <h1 className="mt-2 text-3xl font-bold text-white">Your client roster</h1>
-        </div>
-        <button className="btn-primary" type="button">
-          Add client
-        </button>
+    <form onSubmit={handleSubmit} className="card space-y-4">
+      <div>
+        <h2 className="text-xl font-semibold text-white">Add client</h2>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {clients.length === 0 ? (
-          <div className="card md:col-span-2 xl:col-span-3">
-            <p className="text-slate-300">No clients yet. Add your first client and start invoicing.</p>
-          </div>
-        ) : (
-          clients.map((client) => <ClientCard key={client.id} client={client} />)
-        )}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-2 block text-sm text-slate-300">Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="Jane Smith" required />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm text-slate-300">Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" placeholder="jane@client.com" required />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="mb-2 block text-sm text-slate-300">Company</label>
+          <input value={company} onChange={(e) => setCompany(e.target.value)} className="input" placeholder="Acme Studio" />
+        </div>
       </div>
-    </main>
+
+      {message ? <p className="text-sm text-green-400">{message}</p> : null}
+
+      <button type="submit" className="btn-primary" disabled={loading}>
+        {loading ? 'Saving...' : 'Save client'}
+      </button>
+    </form>
   );
 }

@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const router = useRouter();
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,10 +19,37 @@ export default function LoginPage() {
     setMessage('');
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } }
+    });
 
     if (error) {
       setMessage(error.message);
+      setLoading(false);
+      return;
+    }
+
+    if (data.user && data.session) {
+      const { error: profileError } = await supabase.from('users').upsert(
+        {
+          id: data.user.id,
+          email: data.user.email || email,
+          full_name: fullName
+        },
+        { onConflict: 'id' }
+      );
+
+      if (profileError) {
+        setMessage('Account created but profile sync failed. Please log in again.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (data.user && !data.session) {
+      setMessage('Check your inbox to confirm your account and continue.');
       setLoading(false);
       return;
     }
@@ -37,11 +65,26 @@ export default function LoginPage() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/20 text-2xl text-green-400">
             J
           </div>
-          <h1 className="mt-4 text-3xl font-bold text-white">Welcome back</h1>
-          <p className="mt-2 text-sm text-slate-400">Log in to manage your freelance workspace.</p>
+          <h1 className="mt-4 text-3xl font-bold text-white">Create your account</h1>
+          <p className="mt-2 text-sm text-slate-400">Launch your freelance workspace in less than a minute.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="fullName" className="mb-2 block text-sm text-slate-300">
+              Full name
+            </label>
+            <input
+              id="fullName"
+              type="text"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              className="input"
+              placeholder="Jordan Doe"
+              required
+            />
+          </div>
+
           <div>
             <label htmlFor="email" className="mb-2 block text-sm text-slate-300">
               Email
@@ -67,22 +110,23 @@ export default function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="input"
-              placeholder="••••••••"
+              placeholder="Create a strong password"
+              minLength={8}
               required
             />
           </div>
 
-          {message ? <p className="text-sm text-red-400">{message}</p> : null}
+          {message ? <p className="text-sm text-green-400">{message}</p> : null}
 
           <button type="submit" disabled={loading} className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60">
-            {loading ? 'Logging in...' : 'Log in'}
+            {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-400">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="font-medium text-green-400 hover:text-green-300">
-            Sign up
+          Already have an account?{' '}
+          <Link href="/login" className="font-medium text-green-400 hover:text-green-300">
+            Log in
           </Link>
         </p>
       </div>

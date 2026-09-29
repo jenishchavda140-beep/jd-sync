@@ -1,55 +1,36 @@
 import { stripe } from '@/lib/stripe';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-
-export const config = {
-  api: {
-    bodyParser: false
-  }
-};
 
 export async function POST(request: Request) {
-  const payload = await request.text();
-  const signature = request.headers.get('stripe-signature');
+  const body = await request.json();
+  const { invoiceId, amount, clientName, clientEmail } = body;
 
-  if (!signature) {
-    return new NextResponse('Missing Stripe signature', { status: 400 });
+  if (!amount) {
+    return NextResponse.json({ error: 'Invoice total is required.' }, { status: 400 });
   }
 
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(
-      payload,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET || ''
-    );
-  } catch (error) {
-    return new NextResponse(`Webhook signature verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`, {
-      status: 400
-    });
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const invoiceId = session.metadata?.invoiceId;
-
-    if (invoiceId) {
-      const supabase = createServerSupabaseClient(cookies());
-      const { error } = await supabase
-        .from('invoices')
-        .update({ status: 'Paid' })
-        .eq('id', invoiceId);
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: Math.round(Number(amount) * 100),
+          product_data: {
+            name: `Invoice ${invoiceId || 'J&D Sync'}`
+          }
+        }
       }
+    ],
+    customer_email: clientEmail,
+    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/invoices?payment=success`,
+    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/invoices?payment=cancelled`,
+    metadata: {
+      invoiceId: invoiceId || '',
+      clientName: clientName || ''
     }
-  }
-
-  return new NextResponse(JSON.stringify({ received: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
   });
+
+  return NextResponse.json({ url: session.url });
 }

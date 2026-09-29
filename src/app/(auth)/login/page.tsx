@@ -1,91 +1,67 @@
-'use client';
+import { InvoiceBuilder } from '@/components/InvoiceBuilder';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+export default async function InvoicesPage() {
+  const supabase = createServerSupabaseClient(cookies());
+  const {
+    data: { user },
+    error: userError
+  } = await supabase.auth.getUser();
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  if (userError || !user) {
+    redirect('/login');
+  }
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setLoading(true);
-    setMessage('');
+  const { data: clients = [] } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setMessage(error.message);
-      setLoading(false);
-      return;
-    }
-
-    router.push('/dashboard');
-    router.refresh();
-  };
+  const { data: invoices = [] } = await supabase
+    .from('invoices')
+    .select('*, clients(name,email)')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
 
   return (
-    <main className="flex min-h-[calc(100vh-80px)] items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/70 p-8 shadow-2xl shadow-slate-950/40">
-        <div className="mb-6 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/20 text-2xl text-green-400">
-            J
-          </div>
-          <h1 className="mt-4 text-3xl font-bold text-white">Welcome back</h1>
-          <p className="mt-2 text-sm text-slate-400">Log in to manage your freelance workspace.</p>
+    <main className="space-y-8">
+      <div>
+        <p className="text-sm uppercase tracking-[0.2em] text-green-400/80">Invoices</p>
+        <h1 className="mt-2 text-3xl font-bold text-white">Issue and track invoices</h1>
+      </div>
+
+      <InvoiceBuilder clients={clients} />
+
+      <section className="card">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Invoice list</h2>
+          <span className="text-sm text-slate-400">{invoices.length} total</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="mb-2 block text-sm text-slate-300">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="input"
-              placeholder="hello@jd-groups.com"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="mb-2 block text-sm text-slate-300">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="input"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          {message ? <p className="text-sm text-red-400">{message}</p> : null}
-
-          <button type="submit" disabled={loading} className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60">
-            {loading ? 'Logging in...' : 'Log in'}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-400">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="font-medium text-green-400 hover:text-green-300">
-            Sign up
-          </Link>
-        </p>
-      </div>
+        <div className="space-y-3">
+          {invoices.length === 0 ? (
+            <p className="text-sm text-slate-400">No invoices issued yet.</p>
+          ) : (
+            invoices.map((invoice) => (
+              <div key={invoice.id} className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium text-white">
+                    {invoice.clients?.name ?? 'Unknown client'} • {invoice.clients?.email ?? 'No email'}
+                  </p>
+                  <p className="text-sm text-slate-400">Due {invoice.due_date}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-green-400">${Number(invoice.amount).toFixed(2)}</span>
+                  <span className="inline-flex rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-300">{invoice.status}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
     </main>
   );
 }

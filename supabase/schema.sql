@@ -1,34 +1,3 @@
-# J&D Sync
-
-Official Workspace Solution by JD Groups: a lightweight micro-CRM for solo freelancers to manage clients, issue invoices, and track payments in under 60 seconds.
-
-## Features
-- Secure authentication with Supabase Auth
-- Manage clients and invoices from one dashboard
-- Stripe Checkout-ready invoice payments
-- Row-level security for every user workspace
-- Fast workflow focused on <60 seconds to issue an invoice
-
-## Stack
-- Next.js App Router
-- React
-- Tailwind CSS
-- Supabase PostgreSQL + Auth + RLS
-- Stripe Connect-ready API integration
-- Resend email delivery
-
-## Local development
-1. Install dependencies:
-   npm install
-2. Copy your env file:
-   cp .env.example .env.local
-3. Add your real keys and project URLs.
-4. Run the app:
-   npm run dev
-5. Open http://localhost:3000
-
-## Supabase schema
-```sql
 create extension if not exists pgcrypto;
 
 create table if not exists public.users (
@@ -119,9 +88,3 @@ create policy "Users can delete their own invoices"
 on public.invoices
 for delete
 using (auth.uid() = user_id);
-```
-
-## Notes
-- This app is designed for a fresh Supabase project with Auth enabled.
-- Stripe webhooks must be configured on your Stripe dashboard using your webhook secret.
-- For production deployment, set proper environment variables and your live deployment URL.

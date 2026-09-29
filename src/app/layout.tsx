@@ -10,11 +10,13 @@ export const metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient(cookies());
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
 
   return (
     <html lang="en">
-      <body className="bg-slate-950 text-white antialiased">
+      <body className="bg-slate-950 text-slate-100 antialiased">
         <div className="min-h-screen">
           <Navbar isAuthenticated={Boolean(session)} />
           {children}
