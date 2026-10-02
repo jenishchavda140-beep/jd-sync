@@ -3,10 +3,12 @@ import { Navbar } from '@/components/Navbar';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 
-export const metadata = {
-  title: 'J&D Sync',
-  description: 'Official Workspace Solution by JD Groups'
+export const metadata: Metadata = {
+  title: "J&D Syns",
+  description: "Lightweight micro-CRM",
+  manifest: "/manifest.json",
 };
+
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient(cookies());
